@@ -266,7 +266,7 @@ function buildNames(){const l=document.getElementById('nameList');l.innerHTML=''
   const row=document.createElement('div');row.className='nrow';const dot=document.createElement('span');dot.className='pdot';dot.style.background=COLORS[i];
   const inp=document.createElement('input');inp.className='nameinput';inp.value='Player '+(i+1);inp.maxLength=14;inp.onfocus=()=>inp.select();inp.oninput=e=>st.names[i]=e.target.value||('Player '+(i+1));
   row.appendChild(dot);row.appendChild(inp);l.appendChild(row);}}
-function startGame(){st.scores=st.names.map(()=>Array(18).fill(null));st.nine='front';document.getElementById('cardLoc').textContent=st.loc.name;setNine('front');go('card');saveState();}
+function startGame(){st.scores=st.names.map(()=>Array(18).fill(null));st.nine='front';st.roundId=crypto.randomUUID();st.startedAt=new Date().toISOString();document.getElementById('cardLoc').textContent=st.loc.name;setNine('front');go('card');saveState();}
 function setNine(w){st.nine=w;document.getElementById('tF').classList.toggle('on',w==='front');document.getElementById('tB').classList.toggle('on',w==='back');renderTable();}
 function sub(p,a,b){let s=0;for(let i=a;i<b;i++)s+=st.scores[p][i]||0;return s;}
 function tot(p){return st.scores[p].reduce((a,b)=>a+(b||0),0);}
@@ -308,7 +308,7 @@ function epAddPlayer(){if(st.epDraft.length>=MAX)return;st.epDraft.push({name:'P
 async function quitRound(){
   const ok=await askConfirm('Quit & start over?','This will erase all names and scores and return to the start. This cannot be undone.','Quit & erase');
   if(!ok)return;
-  clearSave();resetAll();
+  saveGame('abandoned');clearSave();resetAll();
 }
 async function epRemove(i){const pl=st.epDraft[i];
   if(pl.scores.some(v=>v!=null)){const ok=await askConfirm('Remove player?','Remove '+(pl.name||'this player')+' from the scorecard? Their scores will be erased.','Remove');if(!ok)return;}
@@ -323,7 +323,7 @@ function showWinner(){const L=leaders();const order=[...st.names.keys()].sort((a
   else{nm.textContent=esc(first(st.names[L[0]]));sc.textContent='Winning score: '+tot(L[0])+' strokes';tn.style.display='none';}
   const fl=document.getElementById('finalList');fl.innerHTML='';order.forEach((p,i)=>{const win=L.includes(p);
     fl.innerHTML+='<div class="finalrow'+(win?' win':'')+'"><span class="rk'+(win?' cr':'')+'">'+(win?'\u265B':(i+1))+'</span><span class="nm"><span class="pdot" style="background:'+COLORS[p]+'"></span>'+esc(st.names[p])+'</span><span class="fs">'+tot(p)+'</span></div>';});
-  document.getElementById('newsBox').style.display='block';document.getElementById('newsOk').style.display='none';clearSave();go('winner');}
+  document.getElementById('newsBox').style.display='block';document.getElementById('newsOk').style.display='none';saveGame('completed');clearSave();go('winner');}
 function signup(){const em=document.getElementById('newsEmail').value.trim();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){alert('Enter a valid email.');return;}if(!document.getElementById('newsConsent').checked){alert('Please check the consent box.');return;}document.getElementById('newsBox').style.display='none';document.getElementById('newsOk').style.display='block';}
 function shareResult(){const L=leaders();const txt=L.length>1?'We tied at GlowZone 360 mini golf!':first(st.names[L[0]])+' won at GlowZone 360 with '+tot(L[0])+' strokes!';if(navigator.share)navigator.share({title:'GlowZone 360',text:txt,url:'https://glowzone360.com'}).catch(()=>{});else alert(txt);}
 function resetAll(){st={loc:null,count:2,names:[],scores:[],nine:'front',kp:null,kh:null,epDraft:null};go('welcome');}
@@ -345,7 +345,7 @@ function askConfirm(title,msg,okLabel,okBlue){return new Promise(res=>{
 /* ---- auto-save / resume ---- */
 const SAVE_KEY='gz360_round_v1';
 function saveState(){try{if(!st.loc||!st.scores.length)return;
-  localStorage.setItem(SAVE_KEY,JSON.stringify({loc:st.loc.id,count:st.count,names:st.names,scores:st.scores,nine:st.nine,ts:Date.now()}));}catch(e){}}
+  localStorage.setItem(SAVE_KEY,JSON.stringify({loc:st.loc.id,count:st.count,names:st.names,scores:st.scores,nine:st.nine,roundId:st.roundId,startedAt:st.startedAt,ts:Date.now()}));}catch(e){}}
 function clearSave(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
 async function tryResume(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return;
   const d=JSON.parse(raw);const loc=LOCATIONS.find(l=>l.id===d.loc);if(!loc||!d.scores)return;
@@ -353,8 +353,29 @@ async function tryResume(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)
   const ok=await askConfirm('Resume your round?','We found an unfinished game saved on this device. Continue where you left off, or start fresh?','Resume',true);
   if(!ok){clearSave();return;}
   st.loc=loc;st.count=d.count;st.names=d.names;st.scores=d.scores;st.nine=d.nine||'front';
+  st.roundId=d.roundId||crypto.randomUUID();st.startedAt=d.startedAt||(d.ts?new Date(d.ts).toISOString():null);
   document.getElementById('cardLoc').textContent=loc.name;setNine(st.nine);go('card');
 }catch(e){}}
+
+/* ---- DB save (Phase B2): anonymous game record to scorecard.games ---- */
+const IS_TEST=(()=>{try{return new URLSearchParams(location.search).get('test')==='1';}catch(e){return false;}})();
+const SAVED_KEY='gz360_saved_games_v1';
+function savedIds(){try{const a=JSON.parse(localStorage.getItem(SAVED_KEY));return Array.isArray(a)?a:[];}catch(e){return [];}}
+function markSaved(id){try{const a=savedIds();if(!a.includes(id)){a.push(id);localStorage.setItem(SAVED_KEY,JSON.stringify(a.slice(-50)));}}catch(e){}}
+function saveGame(status){try{
+  if(!st.loc||!st.scores.length||!played()||!st.roundId)return;   // only a real round with >=1 score
+  if(savedIds().includes(st.roundId))return;                       // never write a round twice
+  const totals=st.names.map((n,p)=>({front9:sub(p,0,9),back9:sub(p,9,18),total:tot(p)}));
+  const body={id:st.roundId,location_id:st.loc.id,player_count:st.count,scores:st.scores,totals:totals,
+    pars_snapshot:st.loc.pars,status:status,started_at:st.startedAt||null,
+    finished_at:status==='completed'?new Date().toISOString():null,won_prize:false,is_test:IS_TEST};
+  markSaved(st.roundId);   // mark before firing so repeated events don't double-send
+  fetch(SB_URL+'/rest/v1/games',{method:'POST',keepalive:true,
+    headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json','Content-Profile':'scorecard',Prefer:'return=minimal'},
+    body:JSON.stringify(body)}).catch(()=>{});
+}catch(e){}}
+addEventListener('pagehide',()=>saveGame('abandoned'));
+
 (async()=>{
   try{LOCATIONS=await loadLocations();cacheLocations(LOCATIONS);}
   catch(e){LOCATIONS=loadCachedLocations()||FALLBACK_LOCATIONS;showLocBanner();}
