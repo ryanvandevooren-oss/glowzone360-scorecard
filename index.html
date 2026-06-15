@@ -270,13 +270,13 @@ let LOCATIONS=[];
 // Read visible locations live from scorecard.public_locations. Maps DB rows to the
 // app's location shape ({id,name,pars,soon}); active=selectable, coming_soon=teaser.
 async function loadLocations(){
-  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,scorecard_status,google_review_url';
+  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,scorecard_status,google_review_url,sort_order';
   const res=await fetch(url,{headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Accept-Profile':'scorecard'}});
   if(!res.ok)throw new Error('HTTP '+res.status);
   const rows=await res.json();
   if(!Array.isArray(rows)||!rows.length)throw new Error('no locations');
-  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null}))
-    .sort((a,b)=>(a.soon-b.soon));// active first, coming_soon last
+  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null,sort:r.sort_order}))
+    .sort((a,b)=>(a.sort-b.sort)||a.name.localeCompare(b.name));// sort_order asc, then name
 }
 function cacheLocations(list){try{localStorage.setItem(LOC_CACHE_KEY,JSON.stringify(list));}catch(e){}}
 function loadCachedLocations(){try{const r=localStorage.getItem(LOC_CACHE_KEY);const l=r&&JSON.parse(r);return Array.isArray(l)&&l.length?l:null;}catch(e){return null;}}
@@ -287,7 +287,7 @@ let st={loc:null,count:2,names:[],scores:[],nine:'front',kp:null,kh:null,epDraft
 function go(s){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));document.querySelector('[data-s="'+s+'"]').classList.add('active');window.scrollTo(0,0);}
 function renderLoc(){const g=document.getElementById('locGrid');g.innerHTML='';LOCATIONS.forEach(l=>{const d=document.createElement('div');
   if(l.soon){d.className='loc soon';d.innerHTML='<div class="nm">'+l.name+'</div><div class="badge">Coming Soon</div>';}
-  else{d.className='loc';d.innerHTML='<div class="nm">'+l.name+'</div><div class="sub">18 Holes · Par 53</div>';d.onclick=()=>{st.loc=l;go('count');};}g.appendChild(d);});}
+  else{d.className='loc';const holes=l.pars.length,par=l.pars.reduce((a,b)=>a+b,0);d.innerHTML='<div class="nm">'+l.name+'</div><div class="sub">'+holes+' Holes · Par '+par+'</div>';d.onclick=()=>{st.loc=l;go('count');};}g.appendChild(d);});}
 function renderCount(){const g=document.getElementById('countGrid');g.innerHTML='';for(let n=1;n<=MAX;n++){const b=document.createElement('button');b.className='num';b.textContent=n;b.onclick=()=>{st.count=n;buildNames();go('names');};g.appendChild(b);}}
 function buildNames(){const l=document.getElementById('nameList');l.innerHTML='';st.names=[];for(let i=0;i<st.count;i++){st.names.push('Player '+(i+1));
   const row=document.createElement('div');row.className='nrow';const dot=document.createElement('span');dot.className='pdot';dot.style.background=COLORS[i];
