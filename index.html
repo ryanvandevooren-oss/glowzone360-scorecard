@@ -163,6 +163,19 @@
   .confirmbox .cancel{background:var(--soft);color:var(--ink);}
   .confirmbox .ok{background:var(--red);color:#fff;}
   .confirmbox .ok.blue{background:var(--blue);}
+  .prizebox{position:relative;background:#fff;border:3px solid var(--red);border-radius:22px;padding:28px 22px 22px;max-width:440px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center;}
+  .prizebox .prizex{position:absolute;top:10px;right:12px;background:none;border:none;font-size:24px;line-height:1;color:var(--dim);cursor:pointer;padding:6px;}
+  .prizebox .peyebrow{font-size:14px;font-weight:800;letter-spacing:2px;color:var(--red);text-transform:uppercase;}
+  .prizebox .pname{font-size:27px;font-weight:800;color:var(--blue);margin:8px 0 18px;line-height:1.15;}
+  .prizebox .pqr{display:flex;justify-content:center;margin:0 auto 16px;min-height:8px;}
+  .prizebox .pqr canvas{border-radius:8px;}
+  .prizebox .pcodebig{display:inline-block;padding:12px 18px;border:2px dashed var(--red);border-radius:12px;font-weight:800;letter-spacing:5px;color:var(--red);background:#fff;font-size:27px;}
+  .prizebox .pinstr{color:var(--ink);font-size:15px;font-weight:600;margin:18px 0 0;line-height:1.4;}
+  .prizebox .ptime{color:var(--dim);font-size:13px;margin:12px 0 0;font-variant-numeric:tabular-nums;}
+  /* object-fit:contain fits tall OR wide images with no crop; the letterbox area
+     is transparent so it shows the card background (no visible bars). */
+  .prizebox .pimg{display:none;width:100%;height:190px;object-fit:contain;background:transparent;margin:4px auto 16px;border-radius:10px;}
+  .prizebox .pdisc{display:none;color:var(--dim);font-size:12px;line-height:1.4;margin:12px 0 0;}
   .epRow{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
   .epRow input{flex:1;background:var(--soft);border:2px solid var(--line);border-radius:11px;padding:13px;font-family:inherit;font-size:16px;font-weight:600;}
   .epRow input:focus{outline:none;border-color:var(--blue);}
@@ -271,12 +284,95 @@
   <h3 id="cfTitle">Are you sure?</h3><p id="cfMsg"></p>
   <div class="crow"><button class="cancel" id="cfCancel">Cancel</button><button class="ok" id="cfOk">Confirm</button></div>
 </div></div>
+<div class="confirmback" id="prizeBack" onclick="if(event.target===this)closePrizeReveal()"><div class="prizebox">
+  <button class="prizex" onclick="closePrizeReveal()" aria-label="Close">&#10005;</button>
+  <div class="peyebrow">&#127881; You won</div>
+  <img class="pimg" id="przImg" alt="">
+  <div class="pname" id="przName"></div>
+  <div class="pqr" id="przQR"></div>
+  <div class="pcodebig" id="przCode"></div>
+  <div class="pinstr">Take this to the front desk to claim your prize.</div>
+  <div class="pdisc" id="przDisc"></div>
+  <div class="ptime" id="przTime"></div>
+</div></div>
 
 <script>
 /* ---- Supabase: live location data (read-only) ---- */
 const SB_URL='https://qfwqdqlzzolyahjcqmka.supabase.co';
 const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmd3FkcWx6em9seWFoamNxbWthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNjU5MTEsImV4cCI6MjA5Mzk0MTkxMX0.pa8JVRj3lpsywOxf762DEpYyRqRDfMRgwEWkx_OUH8M';
 const LOC_CACHE_KEY='gz360_locations_v1';
+/* ---- Inlined QR encoder (qrcode-generator algorithm by kazuhikoarase, MIT) ----
+   Self-contained / offline: redeem codes are encoded ON-DEVICE, never sent to any
+   image API. Fixed to QR version 1, byte mode, ECC level Q (21x21, single RS
+   block) — ample for an 8-char redeem code. Verified vs the published level-Q
+   format-info table + structural invariants. */
+var QRG=(function(){
+  var EXP=new Array(256),LOG=new Array(256),i;
+  for(i=0;i<8;i++)EXP[i]=1<<i;
+  for(i=8;i<256;i++)EXP[i]=EXP[i-4]^EXP[i-5]^EXP[i-6]^EXP[i-8];
+  for(i=0;i<255;i++)LOG[EXP[i]]=i;
+  function gmul(a,b){if(a==0||b==0)return 0;return EXP[(LOG[a]+LOG[b])%255];}
+  function genPoly(ec){var g=[1];for(var i=0;i<ec;i++){var ng=new Array(g.length+1);for(var k=0;k<ng.length;k++)ng[k]=0;for(var j=0;j<g.length;j++){ng[j]^=g[j];ng[j+1]^=gmul(g[j],EXP[i]);}g=ng;}return g;}
+  function rsEncode(data,ec){var gen=genPoly(ec),res=data.slice(),i,j;for(i=0;i<ec;i++)res.push(0);for(i=0;i<data.length;i++){var c=res[i];if(c!=0)for(j=0;j<gen.length;j++)res[i+j]^=gmul(gen[j],c);}return res.slice(data.length);}
+  function makeData(str,dataCount){
+    var bytes=[],i;for(i=0;i<str.length;i++)bytes.push(str.charCodeAt(i)&0xff);
+    var bits=[];function put(v,len){for(var b=len-1;b>=0;b--)bits.push((v>>b)&1);}
+    put(4,4);put(bytes.length,8);for(i=0;i<bytes.length;i++)put(bytes[i],8);
+    var cap=dataCount*8;for(i=0;i<4&&bits.length<cap;i++)bits.push(0);
+    while(bits.length%8!=0)bits.push(0);
+    var cw=[];for(i=0;i<bits.length;i+=8){var v=0;for(var k=0;k<8;k++)v=(v<<1)|bits[i+k];cw.push(v);}
+    var pads=[0xEC,0x11],pi=0;while(cw.length<dataCount)cw.push(pads[pi++%2]);
+    return cw;
+  }
+  var G15=0x537,G15_MASK=0x5412;
+  function bchDigit(d){var n=0;while(d!=0){n++;d>>>=1;}return n;}
+  function bchTypeInfo(data){var d=data<<10;while(bchDigit(d)-bchDigit(G15)>=0)d^=(G15<<(bchDigit(d)-bchDigit(G15)));return((data<<10)|d)^G15_MASK;}
+  function maskFn(p){
+    switch(p){
+      case 0:return function(i,j){return (i+j)%2==0;};
+      case 1:return function(i,j){return i%2==0;};
+      case 2:return function(i,j){return j%3==0;};
+      case 3:return function(i,j){return (i+j)%3==0;};
+      case 4:return function(i,j){return (Math.floor(i/2)+Math.floor(j/3))%2==0;};
+      case 5:return function(i,j){return (i*j)%2+(i*j)%3==0;};
+      case 6:return function(i,j){return ((i*j)%2+(i*j)%3)%2==0;};
+      case 7:return function(i,j){return ((i+j)%2+(i*j)%3)%2==0;};
+    }
+  }
+  var N=21,ECL_Q=3;
+  function blank(){var m=[],r,c;for(r=0;r<N;r++){m[r]=[];for(c=0;c<N;c++)m[r][c]=null;}return m;}
+  function finder(m,row,col){for(var r=-1;r<=7;r++){if(row+r<=-1||N<=row+r)continue;for(var c=-1;c<=7;c++){if(col+c<=-1||N<=col+c)continue;m[row+r][col+c]=((0<=r&&r<=6&&(c==0||c==6))||(0<=c&&c<=6&&(r==0||r==6))||(2<=r&&r<=4&&2<=c&&c<=4));}}}
+  function timing(m){for(var i=8;i<N-8;i++){if(m[i][6]==null)m[i][6]=(i%2==0);if(m[6][i]==null)m[6][i]=(i%2==0);}}
+  function typeInfo(m,mask){
+    var bits=bchTypeInfo((ECL_Q<<3)|mask),i;
+    for(i=0;i<15;i++){var mod=((bits>>i)&1)==1;if(i<6)m[i][8]=mod;else if(i<8)m[i+1][8]=mod;else m[N-15+i][8]=mod;}
+    for(i=0;i<15;i++){var mod2=((bits>>i)&1)==1;if(i<8)m[8][N-i-1]=mod2;else if(i<9)m[8][15-i-1+1]=mod2;else m[8][15-i-1]=mod2;}
+    m[N-8][8]=true;
+  }
+  function mapData(m,data,mask){
+    var inc=-1,row=N-1,bitIndex=7,byteIndex=0,mf=maskFn(mask);
+    for(var col=N-1;col>0;col-=2){if(col==6)col-=1;
+      for(;;){for(var c=0;c<2;c++){if(m[row][col-c]==null){var dark=false;if(byteIndex<data.length)dark=(((data[byteIndex]>>>bitIndex)&1)==1);if(mf(row,col-c))dark=!dark;m[row][col-c]=dark;bitIndex--;if(bitIndex==-1){byteIndex++;bitIndex=7;}}}
+        row+=inc;if(row<0||N<=row){row-=inc;inc=-inc;break;}}}
+  }
+  function lost(m){var lp=0,r,c;
+    for(r=0;r<N;r++)for(c=0;c<N;c++){var same=0,dk=m[r][c];for(var dr=-1;dr<=1;dr++){if(r+dr<0||N<=r+dr)continue;for(var dc=-1;dc<=1;dc++){if(c+dc<0||N<=c+dc)continue;if(dr==0&&dc==0)continue;if(dk==m[r+dr][c+dc])same++;}}if(same>5)lp+=3+same-5;}
+    for(r=0;r<N-1;r++)for(c=0;c<N-1;c++){var cnt=0;if(m[r][c])cnt++;if(m[r+1][c])cnt++;if(m[r][c+1])cnt++;if(m[r+1][c+1])cnt++;if(cnt==0||cnt==4)lp+=3;}
+    for(r=0;r<N;r++)for(c=0;c<N-6;c++){if(m[r][c]&&!m[r][c+1]&&m[r][c+2]&&m[r][c+3]&&m[r][c+4]&&!m[r][c+5]&&m[r][c+6])lp+=40;}
+    for(c=0;c<N;c++)for(r=0;r<N-6;r++){if(m[r][c]&&!m[r+1][c]&&m[r+2][c]&&m[r+3][c]&&m[r+4][c]&&!m[r+5][c]&&m[r+6][c])lp+=40;}
+    var dark=0;for(r=0;r<N;r++)for(c=0;c<N;c++)if(m[r][c])dark++;
+    lp+=Math.abs(100*dark/N/N-50)/5*10;return lp;
+  }
+  function make(text){
+    var dcw=makeData(text,13),ecw=rsEncode(dcw,13),all=dcw.concat(ecw),best=null,bestLost=Infinity;
+    for(var mask=0;mask<8;mask++){
+      var m=blank();finder(m,0,0);finder(m,N-7,0);finder(m,0,N-7);timing(m);typeInfo(m,mask);mapData(m,all,mask);
+      var l=lost(m);if(l<bestLost){bestLost=l;best=m;}
+    }
+    return best;
+  }
+  return {make:make};
+})();
 // Last-resort fallback if the live read fails and there's no cached copy.
 const FALLBACK_LOCATIONS=[
   {id:'brampton',name:'Brampton',pars:[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2],soon:false},
@@ -415,14 +511,54 @@ async function secretScoreCheck(savedPromise){
     if(w&&w.won)renderSecretWin(w);
   }catch(e){}
 }
+let _secretWin=null;
 function renderSecretWin(w){
   const c=document.getElementById('secretWin');if(!c)return;
+  _secretWin=w;
   let h='<div class="swin"><div class="sh">🎉 Secret Score Win!</div>';
   if(w.prize_name)h+='<div class="sp">'+esc(w.prize_name)+'</div>';
   if(w.reveal_text)h+='<div class="sr">'+esc(w.reveal_text)+'</div>';
   if(w.redeem_code)h+='<div class="scode">'+esc(w.redeem_code)+'</div><div class="scl">Show this code to staff to claim your prize.</div>';
+  h+='<button class="btn blue" style="margin-top:16px;font-size:16px;" onclick="openPrizeReveal(_secretWin)">Show prize / Redeem at desk</button>';
   h+='</div>';
   c.innerHTML=h;
+}
+// ---- Full-screen prize reveal with scannable QR. DISPLAY ONLY — there is no
+// redeem button on the guest phone; redemption happens on the staff device. The
+// live ticking clock is an anti-screenshot tell (a screenshot freezes the time).
+// Best-effort: if QR generation fails, the prize + code text still show. ----
+let _przTimer=null;
+function qrCanvas(text,px){
+  const m=QRG.make(text),n=m.length,quiet=4,total=n+quiet*2;
+  const scale=Math.max(3,Math.floor(px/total)),dim=total*scale;
+  const cv=document.createElement('canvas');cv.width=dim;cv.height=dim;cv.style.width=dim+'px';cv.style.height=dim+'px';
+  const ctx=cv.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,dim,dim);ctx.fillStyle='#000';
+  for(let r=0;r<n;r++)for(let cc=0;cc<n;cc++)if(m[r][cc])ctx.fillRect((cc+quiet)*scale,(r+quiet)*scale,scale,scale);
+  return cv;
+}
+function openPrizeReveal(w){
+  try{
+    if(!w)return;
+    const nm=document.getElementById('przName');if(nm)nm.textContent=w.prize_name||'Your prize';
+    const cd=document.getElementById('przCode');if(cd)cd.textContent=w.redeem_code||'';
+    const im=document.getElementById('przImg');
+    if(im){im.onerror=function(){this.style.display='none';};   // broken/missing image -> hide, no gap
+      if(w.prize_image){im.style.display='block';im.src=w.prize_image;}
+      else{im.removeAttribute('src');im.style.display='none';}}
+    const ds=document.getElementById('przDisc');
+    if(ds){if(w.prize_disclaimer){ds.textContent=w.prize_disclaimer;ds.style.display='block';}
+      else{ds.textContent='';ds.style.display='none';}}
+    const qhost=document.getElementById('przQR');
+    if(qhost){qhost.innerHTML='';
+      try{if(w.redeem_code)qhost.appendChild(qrCanvas(w.redeem_code,264));}catch(e){}   // QR fail -> code text still shown
+    }
+    const tick=()=>{const t=document.getElementById('przTime');if(t)t.textContent=new Date().toLocaleString();};
+    tick();if(_przTimer)clearInterval(_przTimer);_przTimer=setInterval(tick,1000);
+    const b=document.getElementById('prizeBack');if(b)b.classList.add('show');
+  }catch(e){}
+}
+function closePrizeReveal(){
+  try{if(_przTimer){clearInterval(_przTimer);_przTimer=null;}const b=document.getElementById('prizeBack');if(b)b.classList.remove('show');}catch(e){}
 }
 function signup(){const em=document.getElementById('newsEmail').value.trim();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){alert('Enter a valid email.');return;}if(!document.getElementById('newsConsent').checked){alert('Please check the consent box.');return;}document.getElementById('newsBox').style.display='none';document.getElementById('newsOk').style.display='block';}
 
