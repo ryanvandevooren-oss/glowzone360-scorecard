@@ -291,7 +291,7 @@
   <div class="pname" id="przName"></div>
   <div class="pqr" id="przQR"></div>
   <div class="pcodebig" id="przCode"></div>
-  <div class="pinstr">Take this to the front desk to claim your prize.</div>
+  <div class="pinstr" id="przInstr">Take this to the front desk to claim your prize.</div>
   <div class="pdisc" id="przDisc"></div>
   <div class="ptime" id="przTime"></div>
 </div></div>
@@ -557,6 +557,8 @@ function renderSecretWin(w){
 // live ticking clock is an anti-screenshot tell (a screenshot freezes the time).
 // Best-effort: if QR generation fails, the prize + code text still show. ----
 let _przTimer=null;
+let _przPoll=null;        // redemption poll interval id
+let _przRedeemed=false;   // guard so we don't re-flip / keep polling
 function qrCanvas(text,px){
   const m=QRG.make(text),n=m.length,quiet=4,total=n+quiet*2;
   const scale=Math.max(3,Math.floor(px/total)),dim=total*scale;
@@ -584,10 +586,45 @@ function openPrizeReveal(w){
     const tick=()=>{const t=document.getElementById('przTime');if(t)t.textContent=new Date().toLocaleString();};
     tick();if(_przTimer)clearInterval(_przTimer);_przTimer=setInterval(tick,1000);
     const b=document.getElementById('prizeBack');if(b)b.classList.add('show');
+    // Reset to the default (not-redeemed) view first — markRedeemedUI mutates this
+    // shared DOM, so a fresh or different win must never inherit a stale redeemed state.
+    _przRedeemed=false;
+    if(qhost)qhost.style.display='';
+    if(cd)cd.style.display='';
+    const t0=document.getElementById('przTime');if(t0)t0.style.display='';
+    const ins=document.getElementById('przInstr');
+    if(ins){ins.textContent='Take this to the front desk to claim your prize.';ins.style.color='';ins.style.fontWeight='';}
+    // Poll redemption status so the reveal flips to "Redeemed" once staff redeem at
+    // the desk. Fire one immediate check (reopening an already-redeemed win flips fast).
+    if(_przPoll){clearInterval(_przPoll);_przPoll=null;}
+    if(w&&w.redeem_code){checkRedeemed(w.redeem_code);_przPoll=setInterval(()=>checkRedeemed(w.redeem_code),12000);}
   }catch(e){}
 }
 function closePrizeReveal(){
-  try{if(_przTimer){clearInterval(_przTimer);_przTimer=null;}const b=document.getElementById('prizeBack');if(b)b.classList.remove('show');}catch(e){}
+  try{if(_przTimer){clearInterval(_przTimer);_przTimer=null;}if(_przPoll){clearInterval(_przPoll);_przPoll=null;}const b=document.getElementById('prizeBack');if(b)b.classList.remove('show');}catch(e){}
+}
+// ---- Redemption auto-flip: poll the anon-callable RPC (returns ONLY {is_redeemed})
+// while the reveal is open. On a confirmed redemption, flip the reveal to a
+// "Redeemed" confirmation. Network failures are swallowed (keep showing the QR;
+// the next tick retries) so a blip never false-flips. ----
+function checkRedeemed(code){
+  if(_przRedeemed||!code)return;
+  fetch(SB_URL+'/rest/v1/rpc/is_secret_score_redeemed',{method:'POST',
+    headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json','Content-Profile':'scorecard'},
+    body:JSON.stringify({p_redeem_code:code})})
+    .then(r=>r&&r.ok?r.json():null)
+    .then(d=>{if(d&&d.is_redeemed===true)markRedeemedUI();})
+    .catch(()=>{});   // network failure -> keep the QR, retry next tick
+}
+function markRedeemedUI(){
+  _przRedeemed=true;
+  const q=document.getElementById('przQR');if(q)q.style.display='none';        // hide QR
+  const cd=document.getElementById('przCode');if(cd)cd.style.display='none';    // hide code
+  if(_przTimer){clearInterval(_przTimer);_przTimer=null;}                       // stop anti-screenshot clock
+  const t=document.getElementById('przTime');if(t){t.textContent='';t.style.display='none';}
+  const ins=document.getElementById('przInstr');
+  if(ins){ins.textContent='✓ Redeemed — enjoy your prize!';ins.style.color='#1aa64b';ins.style.fontWeight='800';}
+  if(_przPoll){clearInterval(_przPoll);_przPoll=null;}                          // stop polling
 }
 function signup(){const em=document.getElementById('newsEmail').value.trim();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){alert('Enter a valid email.');return;}if(!document.getElementById('newsConsent').checked){alert('Please check the consent box.');return;}document.getElementById('newsBox').style.display='none';document.getElementById('newsOk').style.display='block';}
 
