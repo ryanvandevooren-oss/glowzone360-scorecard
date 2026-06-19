@@ -122,6 +122,9 @@
   .finalrow .rk{color:var(--dim);font-size:14px;width:30px;text-align:left;}
   .finalrow .rk.cr{color:#d8a800;}
   .finalrow .nm{flex:1;text-align:left;display:flex;align-items:center;gap:9px;}
+  .finalrow .nmwrap{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .finalrow .ptitle{align-self:flex-start;font-size:11px;font-weight:800;letter-spacing:.3px;color:var(--blue);background:rgba(46,54,143,.09);border-radius:999px;padding:2px 9px;white-space:nowrap;}
+  .finalrow .ptitle2{align-self:flex-start;font-size:10px;font-weight:700;letter-spacing:.3px;color:var(--blue);background:transparent;border:1px solid rgba(46,54,143,.35);border-radius:999px;padding:1px 8px;white-space:nowrap;}
   .finalrow .fs{font-size:22px;color:var(--blue);}
   .newsbox{background:var(--soft);border-radius:16px;padding:18px;margin:14px 0;text-align:left;}
   .newsbox .nt{font-size:17px;font-weight:800;color:var(--blue);}
@@ -386,13 +389,23 @@ let PROMOS=[];
 // jsonb arrives pre-parsed from PostgREST; coerce defensively in case a cached
 // or string-encoded value sneaks in. Returns an object or null (never throws).
 function coerceRules(v){if(v&&typeof v==='object')return v;if(typeof v==='string'){try{return JSON.parse(v);}catch(e){return null;}}return null;}
+// score_titles is a global jsonb keyed by performance band; coerce to
+// {over,around,under} of clean string[] defensively — band-object normalized, a
+// legacy flat array treated as the "around" band, JSON string parsed, else empty.
+function coerceBands(v){
+  if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=null;}}
+  const clean=(a)=>(Array.isArray(a)?a:[]).filter(t=>typeof t==='string'&&t.trim()).map(t=>t.trim());
+  if(Array.isArray(v))return {over:[],around:clean(v),under:[]};
+  if(v&&typeof v==='object')return {over:clean(v.over),around:clean(v.around),under:clean(v.under)};
+  return {over:[],around:[],under:[]};
+}
 async function loadLocations(){
-  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,rules,scorecard_status,google_review_url,sort_order';
+  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,rules,scorecard_status,google_review_url,sort_order,score_titles';
   const res=await fetch(url,{headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Accept-Profile':'scorecard'}});
   if(!res.ok)throw new Error('HTTP '+res.status);
   const rows=await res.json();
   if(!Array.isArray(rows)||!rows.length)throw new Error('no locations');
-  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null,sort:r.sort_order,rules:coerceRules(r.rules)}))
+  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null,sort:r.sort_order,rules:coerceRules(r.rules),score_titles:coerceBands(r.score_titles)}))
     .sort((a,b)=>(a.sort-b.sort)||a.name.localeCompare(b.name));// sort_order asc, then name
 }
 // Read targeted promos live from scorecard.public_promotions. The view already
@@ -515,12 +528,95 @@ function epSave(){st.names=st.epDraft.map((p,i)=>p.name.trim()||('Player '+(i+1)
 async function finishGame(){let f=0;st.scores.forEach(s=>s.forEach(v=>{if(v!=null)f++;}));
   if(f<st.count*18){const ok=await askConfirm('Finish the round?','Some holes don\u2019t have scores yet. Finish anyway and see the winner?','Finish',true);if(!ok)return;}
   showWinner();}
+// ---- Score Titles (pure): one fun title per player. Coded achievement titles
+// in priority order, else a random pick from the global fun pool (st.loc.score_titles),
+// else a baked-in default. No DOM/globals; never throws — missing data falls
+// through to a fun-pool title. ----
+function assignTitles(names,scores,pars,funPool){
+  const DEFAULT_BANDS={
+    over:['The Scenic Route','Future Legend in Training','Putter Still Warming Up'],
+    around:['Glow Getter','Putt Star','Mini Golf Maverick','Neon Knight','Hole Seeker'],
+    under:['Course Crusher','Putt Prodigy','On Fire Tonight','The Closer']
+  };
+  const bands=coerceBands(funPool);                              // {over,around,under}
+  const bandPool=(b)=>(bands[b]&&bands[b].length)?bands[b]:DEFAULT_BANDS[b];
+  const n=names.length;
+  // earned[p] = that player's achievements in priority order (may be empty).
+  let earned=names.map(()=>[]);
+  try{
+    const holes=(Array.isArray(pars)&&pars.length)?pars.length:18;   // derive length from pars
+    const half=Math.floor(holes/2);
+    const isSolo=n===1;
+    const sc=(p)=>Array.isArray(scores[p])?scores[p]:[];
+    const totals=names.map((_,p)=>sc(p).reduce((a,b)=>a+(b||0),0));   // null -> 0 (matches tot())
+    const minTotal=Math.min(...totals),maxTotal=Math.max(...totals);
+    const played=names.map((_,p)=>{const a=sc(p),v=[];for(let h=0;h<holes;h++)if(a[h]!=null)v.push(a[h]);return v;});
+    const spreads=played.map(v=>v.length>=2?Math.max(...v)-Math.min(...v):null);   // over PLAYED holes only
+    const valid=spreads.filter(s=>s!=null);
+    const minSpread=valid.length?Math.min(...valid):null,maxSpread=valid.length?Math.max(...valid):null;
+    const parsPresent=Array.isArray(pars)&&pars.length>0;
+    const parCounts=names.map((_,p)=>{const a=sc(p);let c=0;for(let h=0;h<holes;h++){const s=a[h];if(s!=null&&parsPresent&&pars[h]!=null&&s<=pars[h])c++;}return c;});
+    const maxPar=Math.max(...parCounts),minPar=Math.min(...parCounts);
+    const completed=names.map((_,p)=>{const a=sc(p);for(let h=0;h<holes;h++)if(a[h]==null)return false;return true;});
+    const hasAce=(p)=>sc(p).some(v=>v===1);
+    // Collect ALL earned achievements per player, in priority order (same rules/guards).
+    earned=names.map((_,p)=>{
+      const e=[];
+      if(hasAce(p))e.push('Ace!');                                                                   // 1
+      if(!isSolo&&minTotal!==maxTotal&&totals[p]===minTotal)e.push('The Champion');                  // 2
+      if(completed[p]&&parsPresent){let f=0,b=0,pf=0,pb=0;const a=sc(p);for(let h=0;h<half;h++){f+=a[h]||0;pf+=pars[h]||0;}for(let h=half;h<holes;h++){b+=a[h]||0;pb+=pars[h]||0;}if((b-pb)<(f-pf))e.push('Comeback Kid');} // 3 — rally relative to par
+      if(!isSolo&&spreads[p]!=null&&minSpread!=null&&minSpread!==maxSpread&&spreads[p]===minSpread)e.push('Steady Hand');  // 4
+      if(!isSolo&&parsPresent&&maxPar!==minPar&&parCounts[p]===maxPar)e.push('Par-fect');            // 5
+      if(!isSolo&&minTotal!==maxTotal&&totals[p]===maxTotal)e.push('Most Honest');                   // 6
+      return e;
+    });
+  }catch(e){earned=names.map(()=>[]);}
+  // Per-player performance band (total vs course par) — picks which fun-title
+  // bucket the fallback draws from. Independent of achievements; error -> 'around'.
+  let band=names.map(()=>'around');
+  try{
+    const holes=(Array.isArray(pars)&&pars.length)?pars.length:18;
+    const parTotal=(Array.isArray(pars)?pars:[]).reduce((a,b)=>a+(typeof b==='number'?b:0),0);
+    if(parTotal>0){
+      const cushion=Math.max(1,Math.round(parTotal*0.10));     // ~10% of par, min 1
+      band=names.map((_,p)=>{
+        const a=Array.isArray(scores[p])?scores[p]:[];
+        let played=0,total=0;for(let h=0;h<holes;h++){if(a[h]!=null){played++;total+=a[h];}}
+        if(played<holes/2)return 'around';                     // incomplete-card guard (neutral)
+        const diff=total-parTotal;
+        return diff<-cushion?'under':(diff>cushion?'over':'around');
+      });
+    }
+  }catch(e){band=names.map(()=>'around');}
+  // primary = highest earned, secondary = 2nd earned; null slots get fun titles
+  // drawn from the player's own band (distinct within that band).
+  const result=earned.map(e=>({primary:e[0]||null,secondary:e[1]||null}));
+  // Per-BAND shuffled draw bags (Fisher-Yates): fun titles distinct WITHIN a band;
+  // players in different bands draw from separate bags (may coincidentally share).
+  const bagState={};
+  const bagFor=(b)=>{
+    if(!bagState[b]){const arr=bandPool(b).slice();for(let k=arr.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));const t=arr[k];arr[k]=arr[j];arr[j]=t;}bagState[b]={bag:arr,used:0};}
+    return bagState[b];
+  };
+  const drawFun=(b,avoid)=>{
+    const bs=bagFor(b),bag=bs.bag,pool=bandPool(b);
+    for(let k=bs.used;k<bag.length;k++){if(bag[k]!==avoid){const v=bag[k];bag[k]=bag[bs.used];bag[bs.used]=v;bs.used++;return v;}}
+    if(bs.used<bag.length){const v=bag[bs.used];bs.used++;return v;}   // only avoid-matches left: take it
+    let v=pool[Math.floor(Math.random()*pool.length)];                // bag drained: last-resort repeats
+    if(v===avoid&&pool.length>1)v=pool[(pool.indexOf(v)+1)%pool.length];
+    return v;
+  };
+  result.forEach((r,p)=>{if(r.primary==null)r.primary=drawFun(band[p],null);});           // fill all primaries first
+  result.forEach((r,p)=>{if(r.secondary==null)r.secondary=drawFun(band[p],r.primary);});  // then secondaries, != own primary
+  return result;
+}
 function showWinner(){const L=leaders();const order=[...st.names.keys()].sort((a,b)=>tot(a)-tot(b));const tie=L.length>1;
   const nm=document.getElementById('winName'),sc=document.getElementById('winScore'),tn=document.getElementById('tieNote');
   if(tie){nm.textContent="It's a tie!";sc.textContent='Tied at '+tot(L[0])+' strokes';tn.style.display='block';tn.innerHTML='<strong>'+L.map(p=>esc(first(st.names[p]))).join(' &amp; ')+'</strong> are level. Head to the front desk — staff will set a sudden-death playoff hole to crown the champion.';}
   else{nm.textContent=esc(first(st.names[L[0]]));sc.textContent='Winning score: '+tot(L[0])+' strokes';tn.style.display='none';}
+  const titles=assignTitles(st.names,st.scores,st.loc&&st.loc.pars,st.loc&&st.loc.score_titles);
   const fl=document.getElementById('finalList');fl.innerHTML='';order.forEach((p,i)=>{const win=L.includes(p);
-    fl.innerHTML+='<div class="finalrow'+(win?' win':'')+'"><span class="rk'+(win?' cr':'')+'">'+(win?'\u265B':(i+1))+'</span><span class="nm"><span class="pdot" style="background:'+COLORS[p]+'"></span>'+esc(st.names[p])+'</span><span class="fs">'+tot(p)+'</span></div>';});
+    fl.innerHTML+='<div class="finalrow'+(win?' win':'')+'"><span class="rk'+(win?' cr':'')+'">'+(win?'\u265B':(i+1))+'</span><span class="nm"><span class="pdot" style="background:'+COLORS[p]+'"></span><span class="nmwrap">'+esc(st.names[p])+(titles[p]&&titles[p].primary?'<span class="ptitle">'+esc(titles[p].primary)+'</span>':'')+(titles[p]&&titles[p].secondary?'<span class="ptitle2">'+esc(titles[p].secondary)+'</span>':'')+'</span></span><span class="fs">'+tot(p)+'</span></div>';});
   document.getElementById('newsBox').style.display='block';document.getElementById('newsOk').style.display='none';
   const sw=document.getElementById('secretWin');if(sw)sw.innerHTML='';   // clear any prior round's win card
   secretScoreCheck(saveGame('completed'));   // persist the round, then ask the engine (best-effort)
