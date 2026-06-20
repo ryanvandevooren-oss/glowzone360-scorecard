@@ -117,6 +117,10 @@
   .winscore{color:var(--dim);font-size:17px;}
   .tienote{background:rgba(46,54,143,.09);border:2px solid var(--blue);border-radius:14px;padding:16px;margin:16px 0;font-size:15px;line-height:1.5;}
   .finalwrap{margin:18px 0;border-radius:16px;overflow:hidden;box-shadow:0 3px 14px rgba(40,50,120,.10);background:#fff;}
+  .dbest{background:rgba(46,54,143,.06);border:1.5px solid rgba(46,54,143,.18);border-radius:14px;padding:14px 16px;margin:16px 0;text-align:center;}
+  .dbest .dbnum{font-size:16px;font-weight:800;color:var(--blue);}
+  .dbest .dbcheer{margin-top:6px;font-size:15px;font-weight:800;color:#1aa64b;}
+  .dbest .dbnudge{margin-top:6px;font-size:13px;color:var(--dim);}
   .finalrow{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);font-weight:800;}
   .finalrow:last-child{border-bottom:none;}.finalrow.win{background:#fff7df;}
   .finalrow .rk{color:var(--dim);font-size:14px;width:30px;text-align:left;}
@@ -232,6 +236,7 @@
     <div class="body winwrap"><div class="trophy">&#127942;</div><div class="eyebrow">Final Result</div>
       <div class="winname" id="winName">PLAYER</div><div class="winscore" id="winScore">Winning score: 0</div>
       <div class="tienote" id="tieNote" style="display:none;"></div><div class="finalwrap" id="finalList"></div>
+      <div id="dailyBest" class="dbest" style="display:none;"></div>
       <div id="secretWin" class="stack"></div>
       <div class="newsbox" id="fbCard">
         <div id="fbRate">
@@ -619,8 +624,39 @@ function showWinner(){const L=leaders();const order=[...st.names.keys()].sort((a
     fl.innerHTML+='<div class="finalrow'+(win?' win':'')+'"><span class="rk'+(win?' cr':'')+'">'+(win?'\u265B':(i+1))+'</span><span class="nm"><span class="pdot" style="background:'+COLORS[p]+'"></span><span class="nmwrap">'+esc(st.names[p])+(titles[p]&&titles[p].primary?'<span class="ptitle">'+esc(titles[p].primary)+'</span>':'')+(titles[p]&&titles[p].secondary?'<span class="ptitle2">'+esc(titles[p].secondary)+'</span>':'')+'</span></span><span class="fs">'+tot(p)+'</span></div>';});
   document.getElementById('newsBox').style.display='block';document.getElementById('newsOk').style.display='none';
   const sw=document.getElementById('secretWin');if(sw)sw.innerHTML='';   // clear any prior round's win card
+  // Daily best (best-effort, privacy: just a number). Fetch BEFORE saveGame so the
+  // returned best EXCLUDES this group; skip entirely on test sessions.
+  const db=document.getElementById('dailyBest');if(db){db.style.display='none';db.innerHTML='';}
+  if(!IS_TEST)fetchDailyBest(st.loc&&st.loc.id,tot(L[0]));
   secretScoreCheck(saveGame('completed'));   // persist the round, then ask the engine (best-effort)
   resetFeedback();clearSave();renderPromos('promoWinner','show_on_winner');go('winner');}
+// ---- Daily best (best-effort): anon RPC returns the lowest fully-completed
+// individual total at this location today (or null if none), EXCLUDING this group
+// (fetched before saveGame). Privacy: just a number. Any failure -> stay hidden,
+// never block the winner screen. ----
+function fetchDailyBest(locId,groupBest){
+  if(!locId)return;
+  fetch(SB_URL+'/rest/v1/rpc/daily_best',{method:'POST',
+    headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json','Content-Profile':'scorecard'},
+    body:JSON.stringify({p_location_id:locId})})
+    .then(r=>{if(!r||!r.ok)return;   // non-OK -> leave #dailyBest hidden
+      r.json().then(d=>{const n=(typeof d==='number'&&isFinite(d))?d:null;renderDailyBest(n,groupBest);}).catch(()=>{});})
+    .catch(()=>{});   // network failure -> stay hidden
+}
+function renderDailyBest(dayBestBefore,groupBest){
+  const c=document.getElementById('dailyBest');if(!c)return;
+  if(typeof groupBest!=='number'||!isFinite(groupBest))return;   // nothing sensible to show
+  const displayed=(dayBestBefore==null)?groupBest:Math.min(dayBestBefore,groupBest);
+  let cheer='',nudge='';
+  if(dayBestBefore==null)cheer="🎉 You're first on the board today!";
+  else if(groupBest<dayBestBefore)cheer="🎉 You set today's best!";
+  else if(groupBest===dayBestBefore)cheer="🎉 You tied today's best!";
+  else nudge="Can you beat it next time?";
+  let h='<div class="dbnum">Today\'s best score here: '+displayed+'</div>';
+  if(cheer)h+='<div class="dbcheer">'+cheer+'</div>';
+  else if(nudge)h+='<div class="dbnudge">'+nudge+'</div>';
+  c.innerHTML=h;c.style.display='';
+}
 // ---- Secret Score win check (Phase C): await the confirmed completed-save, then
 // ask the server-side engine. Best-effort — any failure/timeout shows no win and
 // never breaks the winner screen. The response never contains the secret. ----
