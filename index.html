@@ -71,6 +71,10 @@
   .nineToggle button{flex:1;border:2px solid var(--line);background:var(--card);font-family:inherit;font-weight:800;font-size:17px;color:var(--dim);padding:11px;border-radius:13px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:.12s;}
   .nineToggle button .sub2{font-size:11px;font-weight:600;letter-spacing:.3px;opacity:.7;}
   .nineToggle button.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .nineToggle button.cta{border-color:var(--blue);color:var(--blue);animation:ctaPulse 1.4s ease-in-out infinite;}
+  @keyframes ctaPulse{0%,100%{box-shadow:0 0 0 0 rgba(46,54,143,0);}50%{box-shadow:0 0 0 5px rgba(46,54,143,.16);}}
+  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(12px);background:var(--blue);color:#fff;font-weight:700;font-size:15px;line-height:1.35;padding:12px 18px;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.28);z-index:90;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;max-width:86%;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
   .tablewrap{flex:1;overflow:auto;padding:0 10px;min-height:0;display:flex;}
   table{width:100%;height:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 3px 14px rgba(40,50,120,.10);}
@@ -292,6 +296,7 @@
   <h3 id="cfTitle">Are you sure?</h3><p id="cfMsg"></p>
   <div class="crow"><button class="cancel" id="cfCancel">Cancel</button><button class="ok" id="cfOk">Confirm</button></div>
 </div></div>
+<div id="toast" class="toast"></div>
 <div class="confirmback" id="prizeBack" onclick="if(event.target===this)closePrizeReveal()"><div class="prizebox">
   <button class="prizex" onclick="closePrizeReveal()" aria-label="Close">&#10005;</button>
   <div class="peyebrow">&#127881; You won</div>
@@ -481,8 +486,22 @@ function buildNames(){const l=document.getElementById('nameList');l.innerHTML=''
   const row=document.createElement('div');row.className='nrow';const dot=document.createElement('span');dot.className='pdot';dot.style.background=COLORS[i];
   const inp=document.createElement('input');inp.className='nameinput';inp.value='Player '+(i+1);inp.maxLength=14;inp.onfocus=()=>inp.select();inp.oninput=e=>st.names[i]=e.target.value||('Player '+(i+1));
   row.appendChild(dot);row.appendChild(inp);l.appendChild(row);}}
-function startGame(){st.scores=st.names.map(()=>Array(18).fill(null));st.nine='front';st.roundId=crypto.randomUUID();st.startedAt=new Date().toISOString();st.gameSaved=false;document.getElementById('cardLoc').textContent=st.loc.name;setNine('front');go('card');saveState();}
+function startGame(){st.scores=st.names.map(()=>Array(18).fill(null));st.nine='front';st.autoAdvancedToBack=false;st.roundId=crypto.randomUUID();st.startedAt=new Date().toISOString();st.gameSaved=false;document.getElementById('cardLoc').textContent=st.loc.name;setNine('front');go('card');saveState();}
 function setNine(w){st.nine=w;document.getElementById('tF').classList.toggle('on',w==='front');document.getElementById('tB').classList.toggle('on',w==='back');renderTable();}
+// ---- Front-9 -> Back-9 nudge: guide guests to the back nine so they don't finish
+// an 18-hole round at the turn. frontNineComplete = every player scored holes 1-9. ----
+let _toastT=null;
+function showToast(msg){const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');if(_toastT)clearTimeout(_toastT);_toastT=setTimeout(()=>{t.classList.remove('show');_toastT=null;},2500);}
+function frontNineComplete(){const holes=(st.loc&&st.loc.pars&&st.loc.pars.length)?st.loc.pars.length:18;const half=Math.floor(holes/2);if(holes<=half)return false;return st.scores.every(s=>{for(let i=0;i<half;i++)if(s[i]==null)return false;return true;});}
+// Subtle CTA on the Back 9 button while the front is done but they're still on front.
+function updateBackCta(){const tb=document.getElementById('tB');if(tb)tb.classList.toggle('cta',st.nine==='front'&&frontNineComplete());}
+// Auto-advance to the back nine ONCE, on the transition to front-9-complete.
+function maybeAdvanceToBack(){
+  if(st.autoAdvancedToBack||st.nine!=='front'||!frontNineComplete())return;
+  st.autoAdvancedToBack=true;
+  showToast('Front 9 complete! 🏌️ Moving to the Back 9…');
+  setNine('back');
+}
 function sub(p,a,b){let s=0;for(let i=a;i<b;i++)s+=st.scores[p][i]||0;return s;}
 function tot(p){return st.scores[p].reduce((a,b)=>a+(b||0),0);}
 function parSub(a,b){let s=0;for(let i=a;i<b;i++)s+=st.loc.pars[i];return s;}
@@ -501,7 +520,7 @@ function renderTable(){const t=document.getElementById('scTable');const s=st.nin
     st.names.forEach((n,p)=>h+='<td>'+sub(p,9,18)+'</td>');h+='</tr>';}
   h+='</tbody><tfoot><tr><td class="hcol">TOTAL</td><td class="pcol">'+parSub(0,18)+'</td>';
   st.names.forEach((n,p)=>h+='<td class="'+(isLeadCol(p)?'lead':'')+'">'+tot(p)+'</td>');
-  h+='</tr></tfoot>';t.innerHTML=h;updateLeader();}
+  h+='</tr></tfoot>';t.innerHTML=h;updateBackCta();updateLeader();}
 function updateLeader(){const el=document.getElementById('leaderPill');el.className='leaderpill';
   if(!played()){el.textContent="Enter scores to see who's winning";return;}
   const L=leaders();if(L.length===st.names.length){el.classList.add('tie');el.textContent='All square so far';}
@@ -509,7 +528,7 @@ function updateLeader(){const el=document.getElementById('leaderPill');el.classN
   else{el.classList.add('live');el.innerHTML='<span class="cr">\u265B</span> '+esc(first(st.names[L[0]]))+' is your current leader';}}
 function renamePlayer(p){const cur=st.names[p];const v=prompt('Edit name:',cur);if(v!==null){st.names[p]=v.trim()||cur;renderTable();saveState();}}
 function openKey(p,h){st.kp=p;st.kh=h;document.getElementById('keyTitle').textContent=first(st.names[p]);document.getElementById('keySub').textContent='Hole '+(h+1)+' · Par '+st.loc.pars[h];
-  const k=document.getElementById('keypad');k.innerHTML='';for(let n=1;n<=9;n++){const b=document.createElement('button');b.className='key';b.textContent=n;b.onclick=()=>{st.scores[p][h]=n;closeKey();renderTable();saveState();};k.appendChild(b);}document.getElementById('keySheet').classList.add('show');}
+  const k=document.getElementById('keypad');k.innerHTML='';for(let n=1;n<=9;n++){const b=document.createElement('button');b.className='key';b.textContent=n;b.onclick=()=>{st.scores[p][h]=n;closeKey();renderTable();saveState();maybeAdvanceToBack();};k.appendChild(b);}document.getElementById('keySheet').classList.add('show');}
 function closeKey(){document.getElementById('keySheet').classList.remove('show');}
 function openMenu(){document.getElementById('menuSheet').classList.add('show');}
 function closeMenu(){document.getElementById('menuSheet').classList.remove('show');}
@@ -530,8 +549,31 @@ async function epRemove(i){const pl=st.epDraft[i];
   if(pl.scores.some(v=>v!=null)){const ok=await askConfirm('Remove player?','Remove '+(pl.name||'this player')+' from the scorecard? Their scores will be erased.','Remove');if(!ok)return;}
   st.epDraft.splice(i,1);renderEP();}
 function epSave(){st.names=st.epDraft.map((p,i)=>p.name.trim()||('Player '+(i+1)));st.scores=st.epDraft.map(p=>p.scores);st.count=st.names.length;closeEditPlayers();renderTable();saveState();}
-async function finishGame(){let f=0;st.scores.forEach(s=>s.forEach(v=>{if(v!=null)f++;}));
-  if(f<st.count*18){const ok=await askConfirm('Finish the round?','Some holes don\u2019t have scores yet. Finish anyway and see the winner?','Finish',true);if(!ok)return;}
+async function finishGame(){
+  const holes=(st.loc&&st.loc.pars&&st.loc.pars.length)?st.loc.pars.length:18;
+  const half=Math.floor(holes/2);
+  let f=0;st.scores.forEach(s=>s.forEach(v=>{if(v!=null)f++;}));
+  const total=st.count*holes;
+  if(f<total){
+    // Is EXACTLY the back nine missing? (front all scored, back all empty)
+    const frontDone=st.scores.every(s=>{for(let i=0;i<half;i++)if(s[i]==null)return false;return true;});
+    const backEmpty=st.scores.every(s=>{for(let i=half;i<holes;i++)if(s[i]!=null)return false;return true;});
+    let title,msg;
+    if(holes>half&&frontDone&&backEmpty){
+      title='Keep playing?';
+      msg='You\u2019ve only scored the Front 9 (holes 1\u20139). Holes 10\u201318 are still empty. Keep playing the Back 9?';
+    }else{
+      let holesPlayed=0;for(let i=0;i<holes;i++){if(st.scores.every(s=>s[i]!=null))holesPlayed++;}   // a hole is "played" only when ALL players scored it
+      const holesLeft=holes-holesPlayed;
+      title='Finish the round?';
+      msg='You\u2019ve played '+holesPlayed+' of '+holes+' holes \u2014 '+holesLeft+' still to go. Keep playing?';
+    }
+    // Flipped emphasis + safe-by-default: blue "Keep Playing" (and a backdrop tap)
+    // keeps the round going; the de-emphasized "Finish Anyway" is the deliberate
+    // early-finish. askConfirm -> true = Keep Playing, false = Finish Anyway.
+    const keep=await askConfirm(title,msg,'Keep Playing',true,'Finish Anyway',true);
+    if(keep){if(holes>half&&frontDone&&backEmpty)setNine('back');return;}
+  }
   showWinner();}
 // ---- Score Titles (pure): one fun title per player. Coded achievement titles
 // in priority order, else a random pick from the global fun pool (st.loc.score_titles),
@@ -798,15 +840,17 @@ function first(s){return (s||'').trim().split(' ')[0];}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 /* ---- in-app confirm dialog ---- */
-function askConfirm(title,msg,okLabel,okBlue){return new Promise(res=>{
+function askConfirm(title,msg,okLabel,okBlue,cancelLabel,dismissValue){return new Promise(res=>{
   document.getElementById('cfTitle').textContent=title;
   document.getElementById('cfMsg').textContent=msg;
   const ok=document.getElementById('cfOk'),cancel=document.getElementById('cfCancel'),back=document.getElementById('confirmBack');
   ok.textContent=okLabel||'Confirm';ok.className='ok'+(okBlue?' blue':'');
+  cancel.textContent=cancelLabel||'Cancel';
   back.classList.add('show');
+  const dv=dismissValue===undefined?false:dismissValue;   // backdrop-tap result (default = cancel)
   const done=v=>{back.classList.remove('show');ok.onclick=null;cancel.onclick=null;back.onclick=null;res(v);};
   ok.onclick=()=>done(true);cancel.onclick=()=>done(false);
-  back.onclick=e=>{if(e.target===back)done(false);};
+  back.onclick=e=>{if(e.target===back)done(dv);};
 });}
 
 /* ---- auto-save / resume ---- */
@@ -819,7 +863,7 @@ async function tryResume(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)
   const anyScore=d.scores.some(s=>s.some(v=>v!=null));if(!anyScore)return;
   const ok=await askConfirm('Resume your round?','We found an unfinished game saved on this device. Continue where you left off, or start fresh?','Resume',true);
   if(!ok){clearSave();return;}
-  st.loc=loc;st.count=d.count;st.names=d.names;st.scores=d.scores;st.nine=d.nine||'front';
+  st.loc=loc;st.count=d.count;st.names=d.names;st.scores=d.scores;st.nine=d.nine||'front';st.autoAdvancedToBack=true;
   st.roundId=d.roundId||crypto.randomUUID();st.startedAt=d.startedAt||(d.ts?new Date(d.ts).toISOString():null);
   document.getElementById('cardLoc').textContent=loc.name;setNine(st.nine);go('card');
 }catch(e){}}
