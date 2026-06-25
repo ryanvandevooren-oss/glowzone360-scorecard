@@ -879,9 +879,12 @@ function saveGame(status){try{
   if(!st.loc||!st.scores.length||!played()||!st.roundId)return Promise.resolve(false);   // only a real round with >=1 score
   if(savedIds().includes(st.roundId))return Promise.resolve(true);                         // already persisted
   const totals=st.names.map((n,p)=>({front9:sub(p,0,9),back9:sub(p,9,18),total:tot(p)}));
+  // holes_played = holes where ALL players scored (matches migration 024's backfill definition).
+  const holeCount=(st.loc&&st.loc.pars&&st.loc.pars.length)?st.loc.pars.length:18;
+  let holesPlayed=0;for(let i=0;i<holeCount;i++){if(st.scores.every(s=>s[i]!=null))holesPlayed++;}
   const body={id:st.roundId,location_id:st.loc.id,player_count:st.count,scores:st.scores,totals:totals,
     pars_snapshot:st.loc.pars,status:status,started_at:st.startedAt||null,
-    finished_at:status==='completed'?new Date().toISOString():null,won_prize:false,is_test:IS_TEST};
+    finished_at:status==='completed'?new Date().toISOString():null,won_prize:false,is_test:IS_TEST,holes_played:holesPlayed};
   markSaved(st.roundId);   // mark before firing so repeated events don't double-send
   return fetch(SB_URL+'/rest/v1/games',{method:'POST',keepalive:true,
     headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json','Content-Profile':'scorecard',Prefer:'return=minimal'},
