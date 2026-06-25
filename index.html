@@ -410,12 +410,12 @@ function coerceBands(v){
   return {over:[],around:[],under:[]};
 }
 async function loadLocations(){
-  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,rules,scorecard_status,google_review_url,sort_order,score_titles';
+  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,rules,scorecard_status,google_review_url,sort_order,score_titles,max_strokes_per_hole';
   const res=await fetch(url,{headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Accept-Profile':'scorecard'}});
   if(!res.ok)throw new Error('HTTP '+res.status);
   const rows=await res.json();
   if(!Array.isArray(rows)||!rows.length)throw new Error('no locations');
-  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null,sort:r.sort_order,rules:coerceRules(r.rules),score_titles:coerceBands(r.score_titles)}))
+  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null,sort:r.sort_order,rules:coerceRules(r.rules),score_titles:coerceBands(r.score_titles),maxStrokes:r.max_strokes_per_hole}))
     .sort((a,b)=>(a.sort-b.sort)||a.name.localeCompare(b.name));// sort_order asc, then name
 }
 // Read targeted promos live from scorecard.public_promotions. The view already
@@ -528,7 +528,8 @@ function updateLeader(){const el=document.getElementById('leaderPill');el.classN
   else{el.classList.add('live');el.innerHTML='<span class="cr">\u265B</span> '+esc(first(st.names[L[0]]))+' is your current leader';}}
 function renamePlayer(p){const cur=st.names[p];const v=prompt('Edit name:',cur);if(v!==null){st.names[p]=v.trim()||cur;renderTable();saveState();}}
 function openKey(p,h){st.kp=p;st.kh=h;document.getElementById('keyTitle').textContent=first(st.names[p]);document.getElementById('keySub').textContent='Hole '+(h+1)+' · Par '+st.loc.pars[h];
-  const k=document.getElementById('keypad');k.innerHTML='';for(let n=1;n<=9;n++){const b=document.createElement('button');b.className='key';b.textContent=n;b.onclick=()=>{st.scores[p][h]=n;closeKey();renderTable();saveState();maybeAdvanceToBack();};k.appendChild(b);}document.getElementById('keySheet').classList.add('show');}
+  const cap=(st.loc&&st.loc.maxStrokes>=1&&st.loc.maxStrokes<=9)?st.loc.maxStrokes:9;   // per-location cap; fallback 9 = today's behavior
+  const k=document.getElementById('keypad');k.innerHTML='';for(let n=1;n<=cap;n++){const b=document.createElement('button');b.className='key';b.textContent=n;b.onclick=()=>{st.scores[p][h]=n;closeKey();renderTable();saveState();maybeAdvanceToBack();};k.appendChild(b);}document.getElementById('keySheet').classList.add('show');}
 function closeKey(){document.getElementById('keySheet').classList.remove('show');}
 function openMenu(){document.getElementById('menuSheet').classList.add('show');}
 function closeMenu(){document.getElementById('menuSheet').classList.remove('show');}
