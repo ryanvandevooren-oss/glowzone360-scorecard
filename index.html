@@ -192,6 +192,35 @@
   .epRow input:focus{outline:none;border-color:var(--blue);}
   .addBtn{width:100%;border:2px dashed var(--line);background:#fff;color:var(--blue);border-radius:12px;padding:14px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer;margin-top:4px;}
   .addBtn:disabled{opacity:.4;cursor:default;}
+  /* ===== Secret Score experience (splash / win / lose) — glow vocabulary.
+     Mirrors scorecard-admin SecretContentPreview.jsx. Classes are UNUSED until the
+     splash/win/lose render stages wire them up. Palette: GOLD #f0a500, blue #2E368F,
+     body #c7cbe6, deep-blue radial glow. ===== */
+  .ss-screen{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:34px 22px;color:#fff;background:radial-gradient(circle at 50% 28%,#2a2f6e 0%,#161a3d 55%,#0d1030 100%);}
+  .ss-eyebrow{font-size:12px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;color:#f0a500;margin-bottom:8px;}
+  .ss-headline{font-size:26px;font-weight:800;color:#fff;line-height:1.2;margin:0 0 10px;}
+  .ss-headline.gold{color:#f0a500;}
+  .ss-glow{color:#f0a500;text-shadow:0 0 14px rgba(240,165,0,.65);}
+  .ss-body{font-size:15px;color:#c7cbe6;line-height:1.55;margin:0;max-width:340px;}
+  .ss-orb{width:92px;height:92px;border-radius:50%;margin:6px auto 18px;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;color:#3a2a00;background:radial-gradient(circle at 35% 30%,#ffe08a,#f0a500 70%);animation:ss-orb-pulse 2.2s ease-in-out infinite;}
+  @keyframes ss-orb-pulse{0%,100%{transform:scale(1);box-shadow:0 0 30px 8px rgba(240,165,0,.50);}50%{transform:scale(1.08);box-shadow:0 0 54px 18px rgba(240,165,0,.85);}}
+  .ss-spark{position:absolute;color:#f0a500;font-size:16px;pointer-events:none;animation:ss-spark-float 2.8s ease-in-out infinite;}
+  @keyframes ss-spark-float{0%{transform:translateY(6px) scale(.7);opacity:0;}25%{opacity:1;}100%{transform:translateY(-42px) scale(1);opacity:0;}}
+  .ss-trophy{font-size:70px;line-height:1;margin:8px 0;animation:ss-trophy-pulse 1.7s ease-in-out infinite;}
+  @keyframes ss-trophy-pulse{0%,100%{transform:scale(1) rotate(-5deg);}50%{transform:scale(1.14) rotate(5deg);}}
+  .ss-confetti{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;pointer-events:none;animation:ss-confetti-fall 2.6s linear infinite;}
+  @keyframes ss-confetti-fall{0%{transform:translateY(-12px) rotate(0);opacity:0;}12%{opacity:1;}100%{transform:translateY(150px) rotate(340deg);opacity:0;}}
+  .ss-mag{font-size:60px;line-height:1;margin:10px 0 8px;animation:ss-mag-bob 2.4s ease-in-out infinite;}
+  @keyframes ss-mag-bob{0%,100%{transform:translateY(0) rotate(-8deg);}50%{transform:translateY(-9px) rotate(7deg);}}
+  .ss-pill{display:inline-block;background:#f0a500;color:#2a1f00;border-radius:999px;padding:6px 16px;font-size:13px;font-weight:800;animation:ss-pill-pulse 1.8s ease-in-out infinite;}
+  @keyframes ss-pill-pulse{0%,100%{transform:scale(1);opacity:.92;}50%{transform:scale(1.06);opacity:1;}}
+  .ss-prize{margin-top:18px;border:1.5px solid #f0a500;border-radius:16px;padding:14px 16px;background:rgba(240,165,0,.08);display:flex;flex-direction:column;align-items:center;gap:8px;max-width:320px;width:100%;box-sizing:border-box;}
+  .ss-prize img{width:100%;max-height:120px;object-fit:contain;border-radius:10px;display:block;}
+  .ss-prize-text{font-size:16px;font-weight:800;color:#f0a500;}
+  .ss-cta{margin-top:22px;border:none;border-radius:16px;padding:16px 24px;font-family:inherit;font-weight:800;font-size:18px;color:#3a2a00;background:radial-gradient(circle at 35% 30%,#ffe08a,#f0a500 75%);box-shadow:0 6px 22px rgba(240,165,0,.45);cursor:pointer;transition:.12s;}
+  .ss-cta:active{transform:scale(.97);}
+  .ss-detail{display:inline-block;margin-top:12px;padding:8px 16px;border:1.5px solid #f0a500;border-radius:999px;background:rgba(240,165,0,.10);font-size:15px;font-weight:800;color:#fff;}
+  .ss-comeback{margin-top:12px;font-size:15px;font-weight:800;color:#f0a500;}
 </style>
 </head>
 <body>
@@ -410,12 +439,12 @@ function coerceBands(v){
   return {over:[],around:[],under:[]};
 }
 async function loadLocations(){
-  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,rules,scorecard_status,google_review_url,sort_order,score_titles,max_strokes_per_hole';
+  const url=SB_URL+'/rest/v1/public_locations?select=location_id,name,pars,hole_count,rules_text,rules,scorecard_status,google_review_url,sort_order,score_titles,max_strokes_per_hole,secret_score_active,secret_score_content';
   const res=await fetch(url,{headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Accept-Profile':'scorecard'}});
   if(!res.ok)throw new Error('HTTP '+res.status);
   const rows=await res.json();
   if(!Array.isArray(rows)||!rows.length)throw new Error('no locations');
-  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null,sort:r.sort_order,rules:coerceRules(r.rules),score_titles:coerceBands(r.score_titles),maxStrokes:r.max_strokes_per_hole}))
+  return rows.map(r=>({id:r.location_id,name:r.name,pars:r.pars,soon:r.scorecard_status==='coming_soon',review:r.google_review_url||null,sort:r.sort_order,rules:coerceRules(r.rules),score_titles:coerceBands(r.score_titles),maxStrokes:r.max_strokes_per_hole,secretActive:r.secret_score_active===true,secretContent:coerceRules(r.secret_score_content)}))
     .sort((a,b)=>(a.sort-b.sort)||a.name.localeCompare(b.name));// sort_order asc, then name
 }
 // Read targeted promos live from scorecard.public_promotions. The view already
