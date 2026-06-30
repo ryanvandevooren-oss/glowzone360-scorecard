@@ -203,7 +203,7 @@
   .ss-headline{font-size:26px;font-weight:800;color:#fff;line-height:1.2;margin:0 0 10px;}
   .ss-headline.gold{color:#f0a500;}
   .ss-glow{color:#f0a500;text-shadow:0 0 14px rgba(240,165,0,.65);}
-  .ss-body{font-size:15px;color:#c7cbe6;line-height:1.55;margin:0;max-width:340px;}
+  .ss-body{font-size:15px;color:#c7cbe6;line-height:1.55;margin:0 auto;max-width:340px;text-align:center;}
   .ss-orb{width:92px;height:92px;border-radius:50%;margin:6px auto 18px;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;color:#3a2a00;background:radial-gradient(circle at 35% 30%,#ffe08a,#f0a500 70%);animation:ss-orb-pulse 2.2s ease-in-out infinite;}
   @keyframes ss-orb-pulse{0%,100%{transform:scale(1);box-shadow:0 0 30px 8px rgba(240,165,0,.50);}50%{transform:scale(1.08);box-shadow:0 0 54px 18px rgba(240,165,0,.85);}}
   .ss-spark{position:absolute;color:#f0a500;pointer-events:none;animation-name:ss-spark-twinkle;animation-timing-function:ease-in-out;animation-iteration-count:infinite;}
@@ -804,6 +804,7 @@ async function secretScoreCheck(savedPromise){
     if(!r||!r.ok)return;
     const w=await r.json();
     if(w&&w.won)renderSecretWin(w);
+    else if(st.loc&&st.loc.secretActive&&!IS_TEST)renderSecretLose();   // lose tease: active locations only, never on test rounds; reveals NOTHING about the secret
   }catch(e){}
 }
 let _secretWin=null;
@@ -834,6 +835,23 @@ function renderSecretWin(w){
   if(detail)add('ss-detail',detail);                                       // skipped when secret_hole/score absent
   if(w.prize_name)add('ss-prize-text',w.prize_name).style.marginTop='14px';
   add('ss-cta','Show prize / Redeem at desk','button').onclick=()=>openPrizeReveal(_secretWin);
+  c.appendChild(card);
+}
+// ---- Lose tease: shown ONLY when Secret Score is active here and the group didn't
+// win. Pure static editable copy — reveals NOTHING about the secret (the secret does
+// not rotate on a loss, so it must never leak). Uses the same #secretWin slot as the
+// win card (mutually exclusive; cleared each showWinner). DOM + textContent only. ----
+function renderSecretLose(){
+  const c=document.getElementById('secretWin');if(!c)return;
+  const lose=(st.loc&&st.loc.secretContent&&st.loc.secretContent.lose)||{};
+  c.innerHTML='';
+  const card=document.createElement('div');card.className='ss-card';
+  const add=(cls,txt,tag)=>{const el=document.createElement(tag||'div');el.className=cls;if(txt!=null)el.textContent=txt;card.appendChild(el);return el;};
+  add('ss-pill','🔍 So close!').setAttribute('aria-hidden','false');
+  add('ss-mag','🔍').setAttribute('aria-hidden','true');
+  add('ss-headline',lose.headline||'The secret got away this time!');
+  add('ss-body',lose.body||'Thanks for playing — nobody in your group cracked the Secret Score today.');
+  add('ss-comeback',lose.comeback_text||'🔎 It’s still hiding out there. Come back and find it!');
   c.appendChild(card);
 }
 // ---- Full-screen prize reveal with scannable QR. DISPLAY ONLY — there is no
