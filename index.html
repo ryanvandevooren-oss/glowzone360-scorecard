@@ -174,19 +174,20 @@
   .confirmbox .cancel{background:var(--soft);color:var(--ink);}
   .confirmbox .ok{background:var(--red);color:#fff;}
   .confirmbox .ok.blue{background:var(--blue);}
-  .prizebox{position:relative;background:#fff;border:3px solid var(--red);border-radius:22px;padding:28px 22px 22px;max-width:440px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center;}
-  .prizebox .prizex{position:absolute;top:10px;right:12px;background:none;border:none;font-size:24px;line-height:1;color:var(--dim);cursor:pointer;padding:6px;}
-  .prizebox .peyebrow{font-size:14px;font-weight:800;letter-spacing:2px;color:var(--red);text-transform:uppercase;}
-  .prizebox .pname{font-size:27px;font-weight:800;color:var(--blue);margin:8px 0 18px;line-height:1.15;}
+  .prizebox{position:relative;background:radial-gradient(circle at 50% 18%,#2a2f6e 0%,#161a3d 58%,#0d1030 100%);border:2px solid #f0a500;border-radius:22px;padding:28px 22px 22px;max-width:440px;width:100%;max-height:92vh;overflow-y:auto;overflow-x:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);text-align:center;color:#fff;}
+  .prizebox .prizex{position:absolute;top:10px;right:12px;background:none;border:none;font-size:24px;line-height:1;color:#c7cbe6;cursor:pointer;padding:6px;}
+  .prizebox .peyebrow{font-size:13px;font-weight:800;letter-spacing:2px;color:#f0a500;text-transform:uppercase;}
+  .prizebox .pdetail{display:inline-block;margin:10px 0 0;padding:7px 15px;border:1.5px solid #f0a500;border-radius:999px;background:rgba(240,165,0,.10);font-size:14px;font-weight:800;color:#fff;}
+  .prizebox .pname{font-size:27px;font-weight:800;color:#f0a500;margin:12px 0 18px;line-height:1.15;}
   .prizebox .pqr{display:flex;justify-content:center;margin:0 auto 16px;min-height:8px;}
-  .prizebox .pqr canvas{border-radius:8px;}
-  .prizebox .pcodebig{display:inline-block;padding:12px 18px;border:2px dashed var(--red);border-radius:12px;font-weight:800;letter-spacing:5px;color:var(--red);background:#fff;font-size:27px;}
-  .prizebox .pinstr{color:var(--ink);font-size:15px;font-weight:600;margin:18px 0 0;line-height:1.4;}
-  .prizebox .ptime{color:var(--dim);font-size:13px;margin:12px 0 0;font-variant-numeric:tabular-nums;}
+  .prizebox .pqr canvas{border-radius:8px;background:#fff;padding:8px;}
+  .prizebox .pcodebig{display:inline-block;padding:12px 18px;border:2px dashed #f0a500;border-radius:12px;font-weight:800;letter-spacing:5px;color:#f0a500;background:rgba(240,165,0,.08);font-size:27px;}
+  .prizebox .pinstr{color:#c7cbe6;font-size:15px;font-weight:600;margin:18px 0 0;line-height:1.4;}
+  .prizebox .ptime{color:#8a90b8;font-size:13px;margin:12px 0 0;font-variant-numeric:tabular-nums;}
   /* object-fit:contain fits tall OR wide images with no crop; the letterbox area
      is transparent so it shows the card background (no visible bars). */
   .prizebox .pimg{display:none;width:100%;height:190px;object-fit:contain;background:transparent;margin:4px auto 16px;border-radius:10px;}
-  .prizebox .pdisc{display:none;color:var(--dim);font-size:12px;line-height:1.4;margin:12px 0 0;}
+  .prizebox .pdisc{display:none;color:#8a90b8;font-size:12px;line-height:1.4;margin:12px 0 0;}
   .epRow{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
   .epRow input{flex:1;background:var(--soft);border:2px solid var(--line);border-radius:11px;padding:13px;font-family:inherit;font-size:16px;font-weight:600;}
   .epRow input:focus{outline:none;border-color:var(--blue);}
@@ -197,6 +198,7 @@
      splash/win/lose render stages wire them up. Palette: GOLD #f0a500, blue #2E368F,
      body #c7cbe6, deep-blue radial glow. ===== */
   .ss-screen{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:34px 22px;color:#fff;background:radial-gradient(circle at 50% 28%,#2a2f6e 0%,#161a3d 55%,#0d1030 100%);}
+  .ss-card{position:relative;overflow:hidden;border-radius:18px;padding:24px 20px;margin:14px 0;text-align:center;color:#fff;background:radial-gradient(circle at 50% 22%,#2a2f6e 0%,#161a3d 60%,#0d1030 100%);box-shadow:0 8px 30px rgba(13,16,48,.45);border:1.5px solid rgba(240,165,0,.35);}
   .ss-eyebrow{font-size:12px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;color:#f0a500;margin-bottom:8px;}
   .ss-headline{font-size:26px;font-weight:800;color:#fff;line-height:1.2;margin:0 0 10px;}
   .ss-headline.gold{color:#f0a500;}
@@ -346,7 +348,9 @@
 <div id="toast" class="toast"></div>
 <div class="confirmback" id="prizeBack" onclick="if(event.target===this)closePrizeReveal()"><div class="prizebox">
   <button class="prizex" onclick="closePrizeReveal()" aria-label="Close">&#10005;</button>
-  <div class="peyebrow">&#127881; You won</div>
+  <div class="ss-trophy" style="font-size:48px;margin:0 0 4px;" aria-hidden="true">&#127942;</div>
+  <div class="peyebrow">&#9733; Secret Score Win &#9733;</div>
+  <div class="pdetail" id="przDetail" style="display:none;"></div>
   <img class="pimg" id="przImg" alt="">
   <div class="pname" id="przName"></div>
   <div class="pqr" id="przQR"></div>
@@ -803,16 +807,34 @@ async function secretScoreCheck(savedPromise){
   }catch(e){}
 }
 let _secretWin=null;
+// Substitute {hole}/{score} into the win detail template; returns '' (skip) when the
+// enriched fields are absent (re-return edge / older path). Built from engine values.
+function winDetail(w){
+  const sh=w&&w.secret_hole,ss=w&&w.secret_score;
+  if(sh==null||ss==null)return '';
+  const tpl=(st.loc&&st.loc.secretContent&&st.loc.secretContent.win&&st.loc.secretContent.win.detail_template)||'Hole {hole} in {score} strokes — perfect!';
+  return String(tpl).replace(/\{hole\}/g,String(sh)).replace(/\{score\}/g,String(ss));
+}
 function renderSecretWin(w){
   const c=document.getElementById('secretWin');if(!c)return;
   _secretWin=w;
-  let h='<div class="swin"><div class="sh">🎉 Secret Score Win!</div>';
-  if(w.prize_name)h+='<div class="sp">'+esc(w.prize_name)+'</div>';
-  if(w.reveal_text)h+='<div class="sr">'+esc(w.reveal_text)+'</div>';
-  if(w.redeem_code)h+='<div class="scode">'+esc(w.redeem_code)+'</div><div class="scl">Show this code to staff to claim your prize.</div>';
-  h+='<button class="btn blue" style="margin-top:16px;font-size:16px;" onclick="openPrizeReveal(_secretWin)">Show prize / Redeem at desk</button>';
-  h+='</div>';
-  c.innerHTML=h;
+  const win=(st.loc&&st.loc.secretContent&&st.loc.secretContent.win)||{};
+  const headline=win.headline||'You found the Secret Score!';
+  const detail=winDetail(w);
+  // Build the glow card with DOM + textContent (never trust admin/engine copy as HTML).
+  c.innerHTML='';
+  const card=document.createElement('div');card.className='ss-card';
+  ['#f0a500','#EA2128','#2E368F','#ffd76a','#ffffff'].forEach((col,i)=>{   // confetti strips
+    const cf=document.createElement('span');cf.className='ss-confetti';cf.style.left=(10+i*18)+'%';cf.style.background=col;cf.style.animationDelay=(i*0.3).toFixed(1)+'s';card.appendChild(cf);
+  });
+  const add=(cls,txt,tag)=>{const el=document.createElement(tag||'div');el.className=cls;if(txt!=null)el.textContent=txt;card.appendChild(el);return el;};
+  add('ss-trophy','🏆').setAttribute('aria-hidden','true');
+  add('ss-eyebrow','★ Secret Score Win ★');
+  add('ss-headline gold',headline);
+  if(detail)add('ss-detail',detail);                                       // skipped when secret_hole/score absent
+  if(w.prize_name)add('ss-prize-text',w.prize_name).style.marginTop='14px';
+  add('ss-cta','Show prize / Redeem at desk','button').onclick=()=>openPrizeReveal(_secretWin);
+  c.appendChild(card);
 }
 // ---- Full-screen prize reveal with scannable QR. DISPLAY ONLY — there is no
 // redeem button on the guest phone; redemption happens on the staff device. The
@@ -833,6 +855,8 @@ function openPrizeReveal(w){
   try{
     if(!w)return;
     const nm=document.getElementById('przName');if(nm)nm.textContent=w.prize_name||'Your prize';
+    const dt=document.getElementById('przDetail');   // optional "Hole X in Y" line; skips gracefully
+    if(dt){const det=winDetail(w);if(det){dt.textContent=det;dt.style.display='';}else{dt.style.display='none';}}
     const cd=document.getElementById('przCode');if(cd)cd.textContent=w.redeem_code||'';
     const im=document.getElementById('przImg');
     if(im){im.onerror=function(){this.style.display='none';};   // broken/missing image -> hide, no gap
