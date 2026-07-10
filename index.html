@@ -94,6 +94,7 @@
   td.sc.atpar{color:var(--blue);} /* par - blue */
   td.sc.over{color:var(--red);}  /* over par - red */
   td.sc:active{filter:brightness(.94);}
+  td.sc-secret{background:rgba(255,207,58,.20);box-shadow:inset 0 0 0 2px var(--gold);}
   tr.subrow td{background:#dfe2f2;color:var(--blue);font-weight:800;font-size:15px;padding:10px 2px;border-bottom:2px solid var(--line);}
   tr.subrow td.hcol{background:#cdd2ea;font-size:12px;letter-spacing:.5px;}
   tr.subrow td.pcol{background:#cdd2ea;}
@@ -291,6 +292,7 @@
       <div class="tienote" id="tieNote" style="display:none;"></div><div class="finalwrap" id="finalList"></div>
       <div id="dailyBest" class="dbest" style="display:none;"></div>
       <div id="secretWin" class="stack"></div>
+      <button class="btn blue" style="font-size:16px;margin-top:12px;" onclick="renderReviewTable();go('review')">View scorecard</button>
       <div class="newsbox" id="fbCard">
         <div id="fbRate">
           <div class="nt center">How was your visit today?</div>
@@ -320,6 +322,13 @@
       <div id="promoWinner" class="stack"></div>
       <div class="grid2 mt"><button class="btn" style="font-size:16px;" onclick="shareResult()">Share</button><button class="btn blue" style="font-size:16px;" onclick="confirmNewRound()">New Round</button></div>
       </div>
+  </section>
+
+  <section class="screen" data-s="review">
+    <div class="hdr"><button class="hbtn" onclick="go('winner')">&larr;</button><div class="htitle">Your Scorecard</div><div class="hspace"></div></div>
+    <div style="padding:10px 12px 2px;"><button class="btn blue" onclick="go('winner')">&larr; Back to results</button></div>
+    <div class="tablewrap"><table id="reviewTable"></table></div>
+    <div style="padding:10px 12px 14px;"><button class="btn blue lg" onclick="go('winner')">&larr; Back to results</button></div>
   </section>
 
   <section class="screen rules" data-s="rules">
@@ -617,6 +626,25 @@ function updateLeader(){const el=document.getElementById('leaderPill');el.classN
   const L=leaders();if(L.length===st.names.length){el.classList.add('tie');el.textContent='All square so far';}
   else if(L.length>1){el.classList.add('tie');el.textContent='Tied: '+L.map(p=>first(st.names[p])).join(' & ');}
   else{el.classList.add('live');el.innerHTML='<span class="cr">\u265B</span> '+esc(first(st.names[L[0]]))+' is your current leader';}}
+// Read-only full-18 review of the finished scorecard (winner-screen "View scorecard").
+// A standalone variant of renderTable() — no cell onclick, both nines + subtotals + total,
+// and a gold sc-secret ring on the cell(s) that hit the Secret Score (from _secretWin).
+// renderTable() is intentionally left untouched.
+function renderReviewTable(){const t=document.getElementById('reviewTable');if(!t)return;
+  const H=(st.loc&&st.loc.pars&&st.loc.pars.length)?st.loc.pars.length:18;const half=Math.min(9,H);
+  const sec=_secretWin,sh=(sec&&sec.secret_hole!=null)?sec.secret_hole:null,ss=(sec&&sec.secret_score!=null)?sec.secret_score:null;
+  const isSecret=(hole,p)=>sh!=null&&ss!=null&&(hole+1)===sh&&st.scores[p][hole]===ss;   // guarded: no win -> never true
+  let h='<thead><tr><th class="hcol">Hole</th><th class="pcol">Par</th>';
+  st.names.forEach((n,i)=>{const lc=isLeadCol(i);h+='<th class="'+(lc?'lead':'')+'"><span class="cr">'+(lc?'♛':'')+'</span>'+esc(first(n))+'</th>';});
+  h+='</tr></thead><tbody>';
+  const rows=(a,b)=>{for(let hole=a;hole<b;hole++){h+='<tr><td class="hcol">'+(hole+1)+'</td><td class="pcol">'+st.loc.pars[hole]+'</td>';
+    st.names.forEach((n,p)=>{const v=st.scores[p][hole];let cls='sc';if(v==null){cls+=' empty';}else{const par=st.loc.pars[hole];cls+= v<par?' under':(v===par?' atpar':' over');}if(isSecret(hole,p))cls+=' sc-secret';h+='<td class="'+cls+'">'+(v==null?'–':v)+'</td>';});h+='</tr>';}};
+  rows(0,half);
+  h+='<tr class="subrow"><td class="hcol">FRONT 9</td><td class="pcol">'+parSub(0,half)+'</td>';st.names.forEach((n,p)=>h+='<td>'+sub(p,0,half)+'</td>');h+='</tr>';
+  if(H>half){rows(half,H);h+='<tr class="subrow"><td class="hcol">BACK 9</td><td class="pcol">'+parSub(half,H)+'</td>';st.names.forEach((n,p)=>h+='<td>'+sub(p,half,H)+'</td>');h+='</tr>';}
+  h+='</tbody><tfoot><tr><td class="hcol">TOTAL</td><td class="pcol">'+parSub(0,H)+'</td>';
+  st.names.forEach((n,p)=>h+='<td class="'+(isLeadCol(p)?'lead':'')+'">'+tot(p)+'</td>');
+  h+='</tr></tfoot>';t.innerHTML=h;}
 function renamePlayer(p){const cur=st.names[p];const v=prompt('Edit name:',cur);if(v!==null){st.names[p]=v.trim()||cur;renderTable();saveState();}}
 function openKey(p,h){st.kp=p;st.kh=h;document.getElementById('keyTitle').textContent=first(st.names[p]);document.getElementById('keySub').textContent='Hole '+(h+1)+' · Par '+st.loc.pars[h];
   const cap=(st.loc&&st.loc.maxStrokes>=1&&st.loc.maxStrokes<=9)?st.loc.maxStrokes:9;   // per-location cap; fallback 9 = today's behavior
