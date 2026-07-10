@@ -832,6 +832,7 @@ function renderSecretWin(w){
   add('ss-trophy','🏆').setAttribute('aria-hidden','true');
   add('ss-eyebrow','★ Secret Score Win ★');
   add('ss-headline gold',headline);
+  if(typeof w.winner_name==='string'&&w.winner_name.trim())add('ss-headline',w.winner_name);   // winner name (large/bold, white); skipped when absent -> no layout shift
   if(detail)add('ss-detail',detail);                                       // skipped when secret_hole/score absent
   if(w.prize_name)add('ss-prize-text',w.prize_name).style.marginTop='14px';
   add('ss-cta','Show prize / Redeem at desk','button').onclick=()=>openPrizeReveal(_secretWin);
@@ -1012,7 +1013,7 @@ function saveGame(status){try{
   // holes_played = holes where ALL players scored (matches migration 024's backfill definition).
   const holeCount=(st.loc&&st.loc.pars&&st.loc.pars.length)?st.loc.pars.length:18;
   let holesPlayed=0;for(let i=0;i<holeCount;i++){if(st.scores.every(s=>s[i]!=null))holesPlayed++;}
-  const body={id:st.roundId,location_id:st.loc.id,player_count:st.count,scores:st.scores,totals:totals,
+  const body={id:st.roundId,location_id:st.loc.id,player_count:st.count,scores:st.scores,player_names:st.names,totals:totals,
     pars_snapshot:st.loc.pars,status:status,started_at:st.startedAt||null,
     finished_at:status==='completed'?new Date().toISOString():null,won_prize:false,is_test:IS_TEST,holes_played:holesPlayed};
   markSaved(st.roundId);   // mark before firing so repeated events don't double-send
