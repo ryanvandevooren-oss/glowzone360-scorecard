@@ -317,7 +317,8 @@
       <div class="newsbox" id="newsBox"><div class="nt">Want a deal for next time?</div><div class="nd">Join the GlowZone 360 list for promos and glow nights.</div>
         <input type="email" id="newsEmail" placeholder="you@email.com" inputmode="email">
         <label class="consent"><input type="checkbox" id="newsConsent"> I agree to receive emails from GlowZone 360. Unsubscribe anytime.</label>
-        <button class="btn blue" style="font-size:16px;padding:14px;" onclick="signup()">Sign me up</button></div>
+        <button class="btn blue" id="newsBtn" style="font-size:16px;padding:14px;" onclick="signup()">Sign me up</button>
+        <div id="newsErr" style="display:none;color:var(--red);font-size:13px;margin-top:8px;text-align:center;">Something went wrong — please try again.</div></div>
       <div id="newsOk" class="okmsg center" style="display:none;">You're on the list — see you soon!</div>
       <div id="promoWinner" class="stack"></div>
       <div class="grid2 mt"><button class="btn" style="font-size:16px;" onclick="shareResult()">Share</button><button class="btn blue" style="font-size:16px;" onclick="confirmNewRound()">New Round</button></div>
@@ -959,12 +960,22 @@ function markRedeemedUI(){
   if(ins){ins.textContent='✓ Redeemed — enjoy your prize!';ins.style.color='#1aa64b';ins.style.fontWeight='800';}
   if(_przPoll){clearInterval(_przPoll);_przPoll=null;}                          // stop polling
 }
-function signup(){const em=document.getElementById('newsEmail').value.trim();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){alert('Enter a valid email.');return;}if(!document.getElementById('newsConsent').checked){alert('Please check the consent box.');return;}document.getElementById('newsBox').style.display='none';document.getElementById('newsOk').style.display='block';}
+async function signup(){const em=document.getElementById('newsEmail').value.trim();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){alert('Enter a valid email.');return;}if(!document.getElementById('newsConsent').checked){alert('Please check the consent box.');return;}
+  const btn=document.getElementById('newsBtn'),err=document.getElementById('newsErr');
+  if(err)err.style.display='none';if(btn)btn.disabled=true;   // block double-taps while in flight
+  const body={email:em,location_id:(st.loc&&st.loc.id)||null,consent:true,source:'scorecard'};
+  let ok=false;
+  try{const res=await fetch(SB_URL+'/rest/v1/newsletter_signups',{method:'POST',
+    headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json','Content-Profile':'scorecard',Prefer:'return=minimal'},
+    body:JSON.stringify(body)});ok=!!(res&&res.ok);}catch(e){ok=false;}
+  if(ok){document.getElementById('newsBox').style.display='none';document.getElementById('newsOk').style.display='block';}
+  else{if(err)err.style.display='block';if(btn)btn.disabled=false;}   // keep form; re-enable to retry
+}
 
 /* ---- post-game feedback (Phase B3): anonymous rating to scorecard.feedback ---- */
 let fbStars=0;
 function fbShow(id){['fbRate','fbThanks','fbSorry','fbDone'].forEach(s=>{const el=document.getElementById(s);if(el)el.style.display=(s===id?'block':'none');});}
-function resetFeedback(){try{fbStars=0;st.fbSaved=false;
+function resetFeedback(){try{fbStars=0;st.fbSaved=false;st.fbSending=false;
   const url=st.loc&&st.loc.review;
   const btn=document.getElementById('fbReviewBtn'),lnk=document.getElementById('fbReviewLink');
   if(btn){if(url){btn.href=url;btn.style.display='';}else{btn.style.display='none';}}
@@ -973,22 +984,35 @@ function resetFeedback(){try{fbStars=0;st.fbSaved=false;
   const ct=document.getElementById('fbContact');if(ct)ct.value='';
   document.getElementById('fbCard').style.display='block';fbShow('fbRate');
 }catch(e){}}
-function saveFeedback(stars,comment,contact){try{
-  if(st.fbSaved||!st.loc)return;
-  st.fbSaved=true;   // one feedback row per game; anon can't update
+function saveFeedback(stars,comment,contact,opts){try{
+  // fbSaved = confirmed persisted; fbSending = synchronous in-flight guard. Either
+  // one blocks a second insert across the send/skip/pagehide paths (one row per game).
+  if(st.fbSaved||st.fbSending||!st.loc)return;
+  opts=opts||{};
   const body={location_id:st.loc.id,game_id:st.gameSaved?st.roundId:null,stars:stars,
     comment:comment||null,contact:contact||null,is_test:IS_TEST};
-  fetch(SB_URL+'/rest/v1/feedback',{method:'POST',
+  const post=(ka)=>fetch(SB_URL+'/rest/v1/feedback',{method:'POST',keepalive:!!ka,
     headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json','Content-Profile':'scorecard',Prefer:'return=minimal'},
-    body:JSON.stringify(body)}).catch(()=>{});
-}catch(e){}}
+    body:JSON.stringify(body)});
+  if(opts.keepalive){post(true).catch(()=>{});return;}   // pagehide: fire-and-forget, no retry, don't touch guards
+  st.fbSending=true;
+  const done=ok=>{st.fbSending=false;if(ok)st.fbSaved=true;};   // fbSaved only on a confirmed 2xx
+  post(false).then(r=>{if(r&&r.ok){done(true);return;}
+    setTimeout(()=>post(false).then(r2=>done(!!(r2&&r2.ok))).catch(()=>done(false)),1500);   // one retry on failure
+  }).catch(()=>setTimeout(()=>post(false).then(r2=>done(!!(r2&&r2.ok))).catch(()=>done(false)),1500));
+}catch(e){st.fbSending=false;}}
 function rateVisit(n){if(st.fbSaved)return;fbStars=n;
   if(n>=4){saveFeedback(n,null,null);fbShow('fbThanks');}else{fbShow('fbSorry');}}
 function submitSorry(){if(st.fbSaved)return;
   const c=(document.getElementById('fbComment').value||'').trim();
   const ct=(document.getElementById('fbContact').value||'').trim();
   saveFeedback(fbStars||3,c,ct);fbShow('fbDone');}
-function skipFeedback(){try{document.getElementById('fbCard').style.display='none';}catch(e){}}
+function skipFeedback(){try{
+  // Capture a low-star rating (1-3) the guest gave but didn't Send. fbStars=0 in the
+  // rate step means no rating yet -> nothing to save. fbSaved guard inside prevents dupes.
+  if(fbStars&&!st.fbSaved)saveFeedback(fbStars,(document.getElementById('fbComment').value||'').trim()||null,(document.getElementById('fbContact').value||'').trim()||null);
+  document.getElementById('fbCard').style.display='none';
+}catch(e){}}
 function shareResult(){const L=leaders();const txt=L.length>1?'We tied at GlowZone 360 mini golf!':first(st.names[L[0]])+' won at GlowZone 360 with '+tot(L[0])+' strokes!';if(navigator.share)navigator.share({title:'GlowZone 360',text:txt,url:'https://glowzone360.com'}).catch(()=>{});else alert(txt);}
 function resetAll(){st={loc:null,count:2,names:[],scores:[],nine:'front',kp:null,kh:null,epDraft:null};go('welcome');}
 async function confirmNewRound(){
@@ -1049,7 +1073,10 @@ function saveGame(status){try{
     headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json','Content-Profile':'scorecard',Prefer:'return=minimal'},
     body:JSON.stringify(body)}).then(r=>{const ok=!!(r&&r.ok);if(ok&&status==='completed')st.gameSaved=true;return ok;}).catch(()=>false);
 }catch(e){return Promise.resolve(false);}}
-addEventListener('pagehide',()=>saveGame('abandoned'));
+addEventListener('pagehide',()=>{saveGame('abandoned');
+  // Last-chance flush of a rating the guest set but never Sent. keepalive survives teardown;
+  // fire-and-forget (no retry). fbSaved / fbSending guards keep it from doubling a live save.
+  if(fbStars&&!st.fbSaved)saveFeedback(fbStars,(document.getElementById('fbComment').value||'').trim()||null,(document.getElementById('fbContact').value||'').trim()||null,{keepalive:true});});
 
 /* ===== TEMP TEST SCAFFOLDING (Secret Score) — REMOVE LATER =====
    Gated behind ?test=1 (IS_TEST). Fills every hole for every player with a random
